@@ -3,7 +3,7 @@ source "https://rubygems.org"
 ruby File.read(".ruby-version").chomp.gsub("ruby-", "")
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "8.1.3.1"
+gem "rails", "8.1.4"
 gem "rack-cors"
 
 # The original asset pipeline for Rails [https://github.com/rails/sprockets-rails]
@@ -25,7 +25,9 @@ gem "turbo-rails"
 gem "stimulus-rails"
 
 # Use Tailwind CSS [https://github.com/rails/tailwindcss-rails]
-gem "tailwindcss-rails"
+# Tailwind 4 requires a coordinated DaisyUI/theme migration.
+gem "tailwindcss-rails", "~> 3.3"
+gem "tailwindcss-ruby", "~> 3.4"
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
@@ -64,10 +66,11 @@ group :development, :test do
 end
 
 group :development do
+  gem "foreman", require: false
   # gem "annotate", github: "mlitwiniuk/annotate_models", branch: "develop"
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
-  gem "kamal", "= 2.11.0"
+  gem "kamal", "= 2.12.0"
 
   # Add speed badges [https://github.com/MiniProfiler/rack-mini-profiler]
   # gem "rack-mini-profiler"

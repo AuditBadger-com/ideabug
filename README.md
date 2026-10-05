@@ -440,10 +440,14 @@ Both pages are read-only. Voting and marking-as-read require the embedded widget
 
 ### Requirements
 
-- Ruby 4.0 (see `.ruby-version`)
-- PostgreSQL 14+
-- Redis 6+ (Action Cable + cache)
-- Node.js 20+ and Yarn (only for asset compilation in dev)
+- Ruby 4.0.7 and Bundler 4.0.22 (see `.ruby-version` and `Gemfile.lock`)
+- Rails 8.1.4
+- PostgreSQL 18 (used by development and deployment configurations)
+- Redis 8 (Action Cable + cache)
+- Node.js 24.21.0 and Yarn 1.22.22 (only for asset compilation; see `.node-version`)
+
+Tailwind CSS stays on 3.4 with DaisyUI 4, and Pagy stays on 9. Updating those
+major versions requires a separate theme/template and pagination migration.
 
 ### Quick start with Docker (recommended)
 
@@ -455,13 +459,19 @@ dip provision                       # boots postgres+redis, runs bin/setup
 dip rails s                         # http://localhost:3000
 ```
 
+When upgrading an existing Docker development environment from PostgreSQL 14,
+export any data you need before recreating containers. PostgreSQL 18 uses a new
+`postgres_18` volume mounted at `/var/lib/postgresql`; the old volume is preserved
+but is not automatically migrated. Restore your export into the new database.
+Provisioning preserves volumes and runs setup without starting a server.
+
 ### Bare-metal install
 
 ```bash
 git clone https://github.com/humadroid-io/ideabug.git
 cd ideabug
 bundle install
-yarn install
+yarn install --frozen-lockfile
 bin/rails db:prepare
 bin/dev                             # puma + tailwind watch on :3001
 ```
@@ -487,7 +497,7 @@ bin/rails console
 
 ### Production deploy
 
-The repo ships with a pinned Kamal 2.11.0 setup in `config/deploy.example.yml` plus `bin/kamal`. The real `config/deploy.yml` is gitignored so each environment keeps its own host/image/SSH details out of source control.
+The repo ships with a pinned Kamal 2.12.0 setup in `config/deploy.example.yml` plus `bin/kamal`. The real `config/deploy.yml` is gitignored so each environment keeps its own host/image/SSH details out of source control.
 
 Single-host deploy:
 
@@ -661,12 +671,13 @@ The visibility logic is OR-within-segment, AND-across-segments only when you sel
 
 ```bash
 bin/dev                      # puma + tailwind watch
-bin/rails test               # full Minitest suite (run after every change)
+bin/rails test               # model, controller, service and integration tests
+bin/rails test:system        # browser tests (requires Chrome; runs headlessly)
 bin/rails test test/models   # subset
 bundle exec rubocop          # Standard preset, line length 100
 ```
 
-The test suite uses Minitest (not RSpec, despite the project's history). Factories are in `test/factories/`. There is no separate JS test runner; the embedded widget is covered at the HTTP layer (`test/integration/widget_script_test.rb`) and via the API tests it consumes.
+The test suite uses Minitest (not RSpec, despite the project's history). Factories are in `test/factories/`. There is no separate JS test runner; the embedded widget is covered at the HTTP layer, via API tests, and through Selenium browser tests in `test/system/widget_test.rb`. Admin browser tests cover contacts, segments, and feedback. Use `PARALLEL_WORKERS=1` when running against a single local test database.
 
 ### Project conventions
 

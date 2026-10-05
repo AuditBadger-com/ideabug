@@ -3,7 +3,7 @@
 Self-hosted, embeddable widget for in-app announcements + bug/feature feedback. Host app embeds `script.js`, authenticates contacts via JWT (RS256), polls API for announcements. WIP.
 
 ## Stack
-- Rails 8.1 (Ruby 4.0.6) + Postgres + Redis
+- Rails 8.1.4 (Ruby 4.0.7) + Postgres 18 + Redis 8
 - Hotwire (Turbo + Stimulus, importmap-rails), Tailwind + DaisyUI, ActionText/Lexxy
 - Auth: cookie sessions for admin (Rails 8 generated `Authentication` concern), RS256 JWT for embed API
 - Serializers: Blueprinter (`app/blueprints/`)

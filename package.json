@@ -1,4 +1,6 @@
 {
+  "private": true,
+  "packageManager": "yarn@1.22.22",
   "devDependencies": {
     "@prettier/plugin-ruby": "^4.0.4",
     "daisyui": "^4.12.14",

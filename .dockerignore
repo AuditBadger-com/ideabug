@@ -15,6 +15,9 @@
 # Ignore all default key files.
 /config/master.key
 /config/credentials/*.key
+/config/jwt/private.pem
+/config/deploy.yml
+/.kamal/secrets*
 
 # Ignore all logfiles and tempfiles.
 /log/*
