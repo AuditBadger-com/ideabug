@@ -1,9 +1,15 @@
 {
   "private": true,
   "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": "24.21.0",
+    "yarn": "1.22.22"
+  },
+  "dependencies": {
+    "daisyui": "^4.12.14"
+  },
   "devDependencies": {
     "@prettier/plugin-ruby": "^4.0.4",
-    "daisyui": "^4.12.14",
     "postcss": "^8.4.49",
     "prettier-plugin-tailwindcss": "^0.6.9"
   }

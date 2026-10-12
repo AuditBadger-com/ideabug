@@ -519,6 +519,35 @@ If you later move to multiple app hosts, replace this single-host template with 
 
 After bumping versions, no Sprockets manifest config is needed — the widget bundle (`vendor/javascript/ideabug_widget.js` + `app/assets/stylesheets/ideabug_widget.css`) is auto-precompiled per `config/initializers/assets.rb`.
 
+### Heroku asset builds
+
+For Heroku apps using classic buildpacks, configure `heroku/nodejs` before
+`heroku/ruby` so Yarn installs DaisyUI before Rails runs `assets:precompile`.
+Check the current buildpacks first:
+
+```bash
+heroku buildpacks --app YOUR_APP
+```
+
+If no buildpacks are configured (automatic Ruby detection), set both explicitly:
+
+```bash
+heroku buildpacks:set heroku/ruby --app YOUR_APP
+heroku buildpacks:add --index 1 heroku/nodejs --app YOUR_APP
+```
+
+If the app already explicitly uses only `heroku/ruby`, just add Node.js first:
+
+```bash
+heroku buildpacks:add --index 1 heroku/nodejs --app YOUR_APP
+```
+
+The resulting order must be `heroku/nodejs`, then `heroku/ruby`. Commit
+`package.json` and `yarn.lock` before pushing. Node and Yarn versions are pinned
+in `package.json`; keep Node aligned with `.node-version` and the Docker images.
+DaisyUI belongs in `dependencies` because the Node buildpack prunes
+`devDependencies` before the Ruby buildpack compiles Tailwind CSS.
+
 ### Rate limiting
 
 `rack-attack` is enabled out of the box with these throttles (per anonymous ID and per IP):
