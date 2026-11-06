@@ -2,7 +2,7 @@ x-app: &app
   build:
     context: .
     args:
-      RUBY_VERSION: '4.0.7'
+      RUBY_VERSION: '4.0.9'
       PG_MAJOR: '18'
       NODE_MAJOR: '24'
       YARN_VERSION: '1.22.22'

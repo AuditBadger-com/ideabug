@@ -1,11 +1,12 @@
 # ideabug
 
-Self-hosted, embeddable widget for in-app announcements + bug/feature feedback. Host app embeds `script.js`, authenticates contacts via JWT (RS256), polls API for announcements. WIP.
+Self-hosted feedback platform with an embeddable widget for announcements, bug reports, feature requests, voting, and a public roadmap/changelog. Pre-1.0. Host apps embed `script.js`; anonymous identity is the default and RS256 JWT optionally identifies users. The widget polls `/api/v1/state` and loads tab content on demand.
 
 ## Stack
-- Rails 8.1.4 (Ruby 4.0.7) + Postgres 18 + Redis 8
+- Rails 8.1.4.1 (Ruby 4.0.9, Bundler 4.0.22) + Postgres 18 + Redis 8
 - Hotwire (Turbo + Stimulus, importmap-rails), Tailwind + DaisyUI, ActionText/Lexxy
-- Auth: cookie sessions for admin (Rails 8 generated `Authentication` concern), RS256 JWT for embed API
+- Assets: Tailwind 3.4 + DaisyUI 4, Node 24.21.0 + Yarn 1.22.22; keep DaisyUI in production `dependencies` for Heroku builds
+- Auth: cookie sessions for admin (`Authentication`), anonymous IDs + optional RS256 JWT for widget API (`WidgetAuthenticatable`)
 - Serializers: Blueprinter (`app/blueprints/`)
 - Tests: Minitest + shoulda + capybara/selenium + factory_bot. **No RSpec** despite stray `.rspec` file.
 - Lint: Standard via rubocop (`.rubocop.yml`), TargetRubyVersion 4.0, line length 100
@@ -13,39 +14,49 @@ Self-hosted, embeddable widget for in-app announcements + bug/feature feedback. 
 
 ## Domain (see `db/schema.rb`)
 - `User` + `Session` — admin login (email/password, bcrypt)
-- `Contact` — end-user of host app, keyed by `external_id` (from JWT `id`); has `info_payload`, `segments_payload` jsonb
+- `Contact` — end-user keyed by `anonymous_id` or `external_id` (JWT `id`); has `info_payload`, `segments_payload`, `announcements_opted_out`, and `last_seen_at`
 - `Segment` / `SegmentValue` — targeting taxonomy; HABTM with Contact and Announcement
 - `Announcement` — `has_rich_text :content`, HABTM `segment_values`; `AnnouncementRead` join tracks per-contact read state
-- `Ticket` — bug/feature/task; enums `status` (new/in_progress/completed) + `classification` (unclassified/bug/feature_request/task)
+- `Ticket` — enums `status` (new/in_progress/completed) + `classification` (unclassified/bug/feature_request/task); optional contact, source/context, roadmap visibility, schedule/shipped dates, vote counter
+- `TicketVote` — unique contact/ticket vote; `ContactMergeService` transactionally transfers reads, votes, and submitted tickets to an identified contact, collapses duplicates, and removes the anonymous contact
+- `RoadmapPresenter` — shared Now / Next / Shipped / Ideas buckets for API, public roadmap, and admin timeline; shipped takes priority over scheduled, then in-progress, then new ideas
 
 ## Routes
-- Admin (cookie auth): `/dashboard`, `announcements`, `segments`, `segment_values`, `tickets`, `contacts` (index/show/destroy), `session`, `passwords/:token`
-- Public: `GET /` (welcome#home → redirects), `GET /script.js` (embed loader, CSRF-exempt, layout false)
-- API (JWT): `/api/v1/announcements` (index/show), `POST /api/v1/announcements/:id/read`
+- Admin (cookie auth): `/dashboard`, `announcements`, `segments`, `segment_values` (create/destroy), `tickets` (including timeline and transition), `contacts` (index/show/destroy), `session`, `passwords/:token`
+- Public: `/` (marketing page or redirect), `/script.js` (embed loader, CSRF-exempt, layout false), `/roadmap`, `/features/:id`, `/changelog`, `/changelog/:id`, `/up`. Changelog requires public announcements enabled.
+- API: `POST /api/v1/identity` mints/resolves/merges contacts; remaining endpoints require anonymous ID or JWT: `GET /api/v1/state`, announcements index/show/read/read_all/opt_out/opt_in, tickets index/create/show/vote/unvote, `GET /api/v1/roadmap`
+- Test-only: `GET /_test/widget_host` embeds the widget for browser tests
 
 ## Auth flow
 - `ApplicationController` includes `Authentication` (Rails 8 generated). Use `allow_unauthenticated_access only: %i[...]` to opt out.
-- API controllers inherit `Api::V1::BaseController`: skips session auth, runs `authenticate_jwt_token`, finds-or-creates `Contact` by JWT `id`, syncs `info`/`segments`, sets `Current.contact`.
-- JWT verified in `JwtCredentialService` using keys from `config/jwt/{private,public}.pem` (or `JWT_{PRIVATE,PUBLIC}_KEY[_FILE]` env). Generate per README. Host app signs with private key; this app verifies with public.
-- Feature flag `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE` → `Rails.config.x.announcements_publicly_accessible` (helper method on AC).
+- API controllers inherit `Api::V1::BaseController`, skipping session auth/CSRF and including `WidgetAuthenticatable`. Identity comes from `X-Ideabug-Anon-Id` and/or `Authorization: Bearer ...`; verified JWT `info`/`segments` sync to `Current.contact`.
+- Browser identity is stored under `localStorage["ideabug:state"]`. When both identities are present, the anonymous contact is merged; an empty `X-Ideabug-Anonymous-Id` response header clears its browser ID.
+- `JwtCredentialService` verifies RS256 using `JwtConfig.public_key`: `JWT_PUBLIC_KEY_BASE64`, then `JWT_PUBLIC_KEY`, then `config/jwt/` + `JWT_PUBLIC_KEY_FILE` (default `public.pem`). Only the host app signs; private-key settings are used by `test/support/jwt_test_issuer.rb` only.
+- `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE` is stored without boolean coercion; leave unset to disable (the string `"false"` is truthy). `CORS_ALLOWED_ORIGINS` configures API origins; Rack::Attack uses per-process memory counters. hCaptcha is not implemented.
 
 ## Conventions
 - Models follow ordered comment skeleton: `## SCOPES / CONCERNS / CONSTANTS / ATTRIBUTES & RELATED / ASSOCIATIONS / VALIDATIONS / CALLBACKS / OTHER`. Preserve when editing.
-- Schema annotations via custom `annotate` fork (`mlitwiniuk/annotate_models`) — leave the `# == Schema Information` block intact; regenerated automatically.
+- Leave `# == Schema Information` blocks intact. The optional `mlitwiniuk/annotate_models` gem is currently commented out; annotations are not automatically regenerated unless enabled.
 - `Current` (ActiveSupport::CurrentAttributes) holds `session` (admin) and `contact` (API).
 - Stray `.null-ls_*.tmp` files in `app/views/layouts/` are editor crashes — safe to ignore/delete, do not commit.
 
 ## Common commands
 - `bin/dev` — start puma + tailwind watch
 - `bin/rails test` (or via dip: `dip test`) — full Minitest suite
+- `bin/rails test:system` — headless Chrome browser suite; use `PARALLEL_WORKERS=1` for a single local test database
 - `bin/rails test test/models/foo_test.rb` — single file
 - `bundle exec rubocop` — lint (Standard preset)
+- `bundle exec bundle-audit check --update` — gem vulnerability scan (also in `bin/ci`)
 - `bin/rails db:prepare` — create + migrate + seed
 - `dip provision` — bootstrap docker stack
+- Use `mise exec -- ...` locally if needed to select `.ruby-version`; `mise exec -- env PARALLEL_WORKERS=1 bin/rails test`
 
 ## Gotchas
 - `Announcement#read` reads from `attributes["read"]` first (set via SQL select in index queries) — preserve when refactoring.
 - `Contact#update_segments_from_payload` short-circuits if normalized payload unchanged; only creates new `SegmentValue`s if `segment.allow_new_values?`.
-- Embed JS at `app/views/welcome/script.js.erb` is plain JS, not ESM/Stimulus — served at `/script.js`.
-- Two JWT concerns exist: `Api::V1::BaseController` does the real work; `JwtAuthenticatable` concern is currently unused (uses `params.require(:token)` not header).
-- README JWT example uses `user.id` and an `info` payload; the app actually expects `id` to be the contact's `external_id` (string identifier from host app).
+- Announcement targeting is OR within a segment and AND across selected segments, shared through `Announcement.visible_to_contact`. No targets means broadcast.
+- `/script.js` is a bootstrap in `app/views/welcome/script.js.erb`; the main widget is `vendor/javascript/ideabug_widget.js` (plain IIFE, not ESM/Stimulus), styled by `app/assets/stylesheets/ideabug_widget.css`.
+- JWT `id` is a stable string from the host app, stored as `Contact.external_id`; do not use ideabug's internal contact ID. `jti` is not checked for replay; `exp`/`iat` are validated when present, not required by the verifier.
+- Keep the shoulda reporter compatibility shim and Chrome password-manager preferences in test support when upgrading.
+- Docker provisioning preserves volumes; PostgreSQL 18 uses `postgres_18` separately from historical PostgreSQL 14 data. Never delete old volumes as part of an upgrade.
+- `AGENTS.md` is a symlink to this file (`CLAUDE.md`).
