@@ -56,6 +56,8 @@ Self-hosted feedback platform with an embeddable widget for announcements, bug r
 - `Contact#update_segments_from_payload` short-circuits if normalized payload unchanged; only creates new `SegmentValue`s if `segment.allow_new_values?`.
 - Announcement targeting is OR within a segment and AND across selected segments, shared through `Announcement.visible_to_contact`. No targets means broadcast.
 - `/script.js` is a bootstrap in `app/views/welcome/script.js.erb`; the main widget is `vendor/javascript/ideabug_widget.js` (plain IIFE, not ESM/Stimulus), styled by `app/assets/stylesheets/ideabug_widget.css`.
+- Tickets created through `POST /api/v1/tickets` are never public: an admin sets `public_on_roadmap` after rewriting the text, because submissions quote host-app data. Source is `agent` only when the verified JWT carries `src: "agent"`, otherwise `widget`; never read it from params.
+- Tests: unset a shell-exported `JWT_PRIVATE_KEY` (`env -u JWT_PRIVATE_KEY`), or `JwtTestIssuer` signs with it instead of `private_test.pem` and every JWT test returns 401.
 - JWT `id` is a stable string from the host app, stored as `Contact.external_id`; do not use ideabug's internal contact ID. `jti` is not checked for replay; `exp`/`iat` are validated when present, not required by the verifier.
 - Keep the shoulda reporter compatibility shim and Chrome password-manager preferences in test support when upgrading.
 - Docker provisioning preserves volumes; PostgreSQL 18 uses `postgres_18` separately from historical PostgreSQL 14 data. Never delete old volumes as part of an upgrade.

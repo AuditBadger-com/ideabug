@@ -90,7 +90,7 @@ module Api
       end
 
       context "POST create" do
-        should "create a feature request marked widget+public" do
+        should "create a feature request from the widget as private" do
           assert_difference "Ticket.count", 1 do
             post api_v1_tickets_url,
               headers: @headers,
@@ -101,8 +101,49 @@ module Api
           ticket = Ticket.last
           assert_equal @contact.id, ticket.contact_id
           assert_equal "widget", ticket.source
-          assert ticket.public_on_roadmap
+          refute ticket.public_on_roadmap
           assert_equal "feature_request", ticket.classification
+        end
+
+        should "keep a new feature request off the public roadmap until an admin publishes it" do
+          post api_v1_tickets_url,
+            headers: @headers,
+            params: {ticket: {title: "Export the vendor list", classification: "feature_request"}},
+            as: :json
+
+          ticket = Ticket.last
+          assert_raises(ActiveRecord::RecordNotFound) { get public_feature_url(ticket) }
+
+          get api_v1_tickets_url, headers: {ANON_HEADER => create(:contact, :anonymous).anonymous_id}
+          refute_includes JSON.parse(response.body).map { |t| t["id"] }, ticket.id
+        end
+
+        should "mark a ticket as agent when the signed token carries src agent" do
+          identified = create(:contact, external_id: "host-user-42")
+          token = JwtTestIssuer.generate_token(identified, src: "agent")
+
+          post api_v1_tickets_url,
+            headers: {"Authorization" => "Bearer #{token}"},
+            params: {ticket: {title: "Import failed", classification: "bug",
+                              context: {tool: "evidence.import_history"}}},
+            as: :json
+
+          assert_response :created
+          ticket = Ticket.last
+          assert_equal "agent", ticket.source
+          assert_equal identified.id, ticket.contact_id
+          refute ticket.public_on_roadmap
+          assert_equal({"tool" => "evidence.import_history"}, ticket.context)
+          assert_equal ticket.id, JSON.parse(response.body)["id"]
+        end
+
+        should "ignore a source sent as a request param" do
+          post api_v1_tickets_url,
+            headers: @headers,
+            params: {ticket: {title: "Spoof", classification: "bug"}, source: "agent"},
+            as: :json
+
+          assert_equal "widget", Ticket.last.source
         end
 
         should "create a bug ticket as private" do

@@ -30,8 +30,11 @@ module Api
       def create
         ticket = Ticket.new(ticket_params)
         ticket.contact = Current.contact
-        ticket.source = "widget"
-        ticket.public_on_roadmap = ticket.feature_request? && !ticket.bug?
+        ticket.source = agent_submission? ? "agent" : "widget"
+        # Submissions stay private to the submitter. They often quote the host
+        # app's data, so an admin publishes a ticket on the roadmap only after
+        # rewriting it for the public.
+        ticket.public_on_roadmap = false
         ticket.save!
 
         render json: TicketBlueprint.render(ticket, contact: Current.contact), status: :created
@@ -50,6 +53,12 @@ module Api
       end
 
       private
+
+      # The host app marks a ticket filed by its AI agent with a signed
+      # `src: "agent"` claim; a request param could be forged by any visitor.
+      def agent_submission?
+        widget_jwt_claims["src"] == "agent"
+      end
 
       def find_visible_ticket
         ticket = Ticket.find(params[:id])
