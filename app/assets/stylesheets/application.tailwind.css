@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 @layer base {
+  /* Map Lexxy (ActionText) colors onto the active DaisyUI theme. `html[data-theme]`
+     outranks Lexxy's `:root` defaults, which load later and are light-only. */
+  html[data-theme] {
+    --lexxy-color-ink: oklch(var(--bc));
+    --lexxy-color-ink-medium: oklch(var(--bc) / 0.72);
+    --lexxy-color-ink-light: oklch(var(--bc) / 0.5);
+    --lexxy-color-ink-lighter: oklch(var(--b3));
+    --lexxy-color-ink-lightest: oklch(var(--b2));
+    --lexxy-color-ink-inverted: oklch(var(--b1));
+    --lexxy-color-accent-dark: oklch(var(--p));
+    --lexxy-color-accent-medium: oklch(var(--p) / 0.7);
+    --lexxy-color-accent-light: oklch(var(--p) / 0.25);
+    --lexxy-color-accent-lightest: oklch(var(--p) / 0.14);
+    --lexxy-color-code-token-punctuation: oklch(var(--bc) / 0.8);
+  }
+
   :focus-visible {
     @apply outline-none ring-2 ring-primary/45 ring-offset-2 ring-offset-base-100;
   }
@@ -91,13 +107,13 @@
   .app-panel,
   .public-panel {
     @apply rounded-xl border border-base-300 bg-base-100;
-    box-shadow: 0 1px 2px hsl(var(--bc) / 0.025);
+    box-shadow: 0 1px 2px oklch(var(--bc) / 0.025);
   }
 
   .app-card,
   .public-card {
     @apply rounded-xl border border-base-300 bg-base-100 p-5 sm:p-6;
-    box-shadow: 0 1px 2px hsl(var(--bc) / 0.025);
+    box-shadow: 0 1px 2px oklch(var(--bc) / 0.025);
   }
 
   .app-subpanel {
@@ -247,15 +263,15 @@
   }
 
   .public-prose :where(h1, h2, h3, h4, strong, code) {
-    color: hsl(var(--bc));
+    color: oklch(var(--bc));
   }
 
   .public-prose :where(p, li, blockquote) {
-    color: hsl(var(--bc) / 0.82);
+    color: oklch(var(--bc) / 0.82);
   }
 
   .public-prose :where(a) {
-    color: hsl(var(--p));
+    color: oklch(var(--p));
     text-decoration: none;
   }
 
@@ -265,7 +281,7 @@
 
   .public-prose :where(blockquote) {
     @apply rounded-lg bg-base-200;
-    border-color: hsl(var(--p) / 0.3);
+    border-color: oklch(var(--p) / 0.3);
     border-left-width: 4px;
   }
 
