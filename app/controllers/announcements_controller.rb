@@ -12,12 +12,12 @@ class AnnouncementsController < ApplicationController
 
     case params[:scheduled]
     when "future" then scope = scope.where("published_at > ?", Time.current)
-    when "past"   then scope = scope.where("published_at <= ?", Time.current)
+    when "past" then scope = scope.where("published_at <= ?", Time.current)
     end
 
     case params[:targeting]
     when "broadcast" then scope = scope.where.missing(:segments)
-    when "targeted"  then scope = scope.joins(:segments).distinct
+    when "targeted" then scope = scope.joins(:segments).distinct
     end
 
     respond_to do |format|
@@ -49,8 +49,8 @@ class AnnouncementsController < ApplicationController
         format.html { redirect_to @announcement, notice: "Announcement was successfully created." }
         format.json { render :show, status: :created, location: @announcement }
       else
-        format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @announcement.errors, status: :unprocessable_entity }
+        format.html { render :new, status: :unprocessable_content }
+        format.json { render json: @announcement.errors, status: :unprocessable_content }
       end
     end
   end
@@ -62,8 +62,8 @@ class AnnouncementsController < ApplicationController
         format.html { redirect_to @announcement, notice: "Announcement was successfully updated." }
         format.json { render :show, status: :ok, location: @announcement }
       else
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @announcement.errors, status: :unprocessable_entity }
+        format.html { render :edit, status: :unprocessable_content }
+        format.json { render json: @announcement.errors, status: :unprocessable_content }
       end
     end
   end

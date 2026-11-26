@@ -7,7 +7,7 @@ class ContactsController < ApplicationController
 
     case params[:type]
     when "identified" then scope = scope.identified
-    when "anonymous"  then scope = scope.anonymous
+    when "anonymous" then scope = scope.anonymous
     end
 
     if params[:active] == "24h"
