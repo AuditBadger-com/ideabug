@@ -115,7 +115,7 @@ module Api
           assert_raises(ActiveRecord::RecordNotFound) { get public_feature_url(ticket) }
 
           get api_v1_tickets_url, headers: {ANON_HEADER => create(:contact, :anonymous).anonymous_id}
-          refute_includes JSON.parse(response.body).map { |t| t["id"] }, ticket.id
+          refute_includes JSON.parse(response.body).pluck("id"), ticket.id
         end
 
         should "mark a ticket as agent when the signed token carries src agent" do
@@ -144,6 +144,31 @@ module Api
             as: :json
 
           assert_equal "widget", Ticket.last.source
+        end
+
+        should "ignore a source sent inside the ticket params" do
+          post api_v1_tickets_url,
+            headers: @headers,
+            params: {ticket: {title: "Spoof", classification: "bug", source: "agent"}},
+            as: :json
+
+          assert_response :created
+          assert_equal "widget", Ticket.last.source
+        end
+
+        should "mark a ticket as widget when the signed token has no src claim" do
+          identified = create(:contact, external_id: "host-user-43")
+          token = JwtTestIssuer.generate_token(identified)
+
+          post api_v1_tickets_url,
+            headers: {"Authorization" => "Bearer #{token}"},
+            params: {ticket: {title: "Broken button", classification: "bug"}},
+            as: :json
+
+          assert_response :created
+          ticket = Ticket.last
+          assert_equal "widget", ticket.source
+          assert_equal identified.id, ticket.contact_id
         end
 
         should "create a bug ticket as private" do
