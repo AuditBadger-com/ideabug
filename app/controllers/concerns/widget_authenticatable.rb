@@ -36,8 +36,13 @@ module WidgetAuthenticatable
     apply_jwt_payload(contact, jwt_data) if jwt_data
     contact.update_columns(last_seen_at: Time.current)
 
+    @widget_jwt_claims = jwt_data || {}
     Current.contact = contact
   end
+
+  # Verified claims of the Bearer token, or {} for an anonymous request.
+  # Only the host app can sign them, so a claim here is trusted host input.
+  attr_reader :widget_jwt_claims
 
   def resolve_contact(anon_id:, external_id:)
     if anon_id && external_id

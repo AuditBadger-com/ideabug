@@ -73,6 +73,6 @@ provision:
   # cannot down a non-existent container without an error,
   # see https://github.com/docker/compose/issues/9426
   # - (test -f .env.development.local) || (echo "\n\n ⚠️  .env.development.local file is missing\n\n"; exit 1)
-  - dip compose down --volumes || true
+  - dip compose down || true
   - dip compose up -d postgres redis
-  - dip bash -c bin/setup
+  - dip runner bin/setup --skip-server

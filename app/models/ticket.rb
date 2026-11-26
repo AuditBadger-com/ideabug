@@ -31,7 +31,7 @@
 #  fk_rails_...  (contact_id => contacts.id)
 #
 class Ticket < ApplicationRecord
-  SOURCES = %w[admin widget api].freeze
+  SOURCES = %w[admin widget api agent].freeze
 
   ## SCOPES
   scope :ordered, -> { order(created_at: :desc) }

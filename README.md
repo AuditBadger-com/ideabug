@@ -115,8 +115,8 @@ That's it. The widget will:
 
 1. Call `POST /api/v1/identity` on first load and persist the returned `anonymous_id` in `localStorage` under `ideabug:state`.
 2. Render a bell with a badge for unread updates.
-3. Open a 360×520 panel with three tabs: **Updates**, **Suggest**, **Roadmap**.
-4. Poll the announcements endpoint every 60s (5min when the tab is hidden).
+3. Open a responsive 400×600 desktop panel with three tabs: **Updates**, **Share feedback** (including **My submissions**), **Roadmap**.
+4. Poll `/api/v1/state` every 60s (5min when the tab is hidden). Announcement lists and details load on demand.
 
 #### Anonymous identity flow
 
@@ -164,19 +164,20 @@ If your app already has authenticated users, you can promote anonymous contacts 
 
 #### 2a. Generate a key pair (once)
 
-On the **ideabug server**:
+On your **host-app backend**, generate the key pair:
 
 ```bash
-openssl genpkey -algorithm RSA -out config/jwt/private.pem -pkeyopt rsa_keygen_bits:2048
-openssl rsa -pubout -in config/jwt/private.pem -out config/jwt/public.pem
+openssl genpkey -algorithm RSA -out config/ideabug_private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in config/ideabug_private.pem -out config/ideabug_public.pem
 ```
 
-Distribute `private.pem` to your host application and keep it there — it is the signing key and must never leave your backend. ideabug only needs the **public** key: it verifies tokens, it never mints them.
+Keep `config/ideabug_private.pem` on the host-app backend, outside version control. Copy only the public key to `config/jwt/public.pem` on ideabug (create that directory if needed). ideabug verifies tokens; it never mints them in production.
 
 You can also pass the public key via env vars (recommended in containerized deployments):
 
 | Variable | Purpose |
 |---|---|
+| `JWT_PUBLIC_KEY_BASE64` | Base64-encoded PEM public key. Takes precedence over the other public-key settings. |
 | `JWT_PUBLIC_KEY` | PEM-encoded public key (verbatim contents). Takes precedence over `JWT_PUBLIC_KEY_FILE`. |
 | `JWT_PUBLIC_KEY_FILE` | Filename inside `config/jwt/`. Defaults to `public.pem`. |
 
@@ -188,7 +189,7 @@ Identity in ideabug is established by the JWT's `id` claim, so token forgery wou
 
 - **Signature is actually checked.** `JWT.decode` is called with verification on; an unverified decode path does not exist.
 - **Algorithm is pinned to `RS256` server-side.** This blocks the two classic JWT attacks: `alg: none` (unsigned tokens) and algorithm confusion (an HS256 token signed with the public key as an HMAC secret). Both are rejected as `JWT::IncorrectAlgorithm`.
-- **`exp` and `iat` are enforced.** Expired tokens and tokens with a malformed/future issued-at are rejected before any contact lookup.
+- **`exp` and `iat` are validated when present.** Expired tokens and tokens with a malformed/future issued-at are rejected by the verifier. Missing claims are not rejected, so host apps should always include both. `/api/v1/identity` falls back to anonymous identity for invalid JWTs; other widget endpoints return 401.
 - **Only the public key is loaded.** There is no code path that uses a private key to verify, so a leaked verifier process cannot be turned into a signer.
 
 The practical consequence: without the RSA private key (which lives on your host app, never on ideabug), an attacker cannot mint a token that authenticates as any `external_id`, nor tamper with the payload of a captured token without invalidating its signature. These properties are pinned by the test suite — see `test/controllers/api/v1/base_controller_test.rb` for the four forgery vectors (attacker-signed RS256, alg-confusion HS256, `alg: none`, payload tampering).
@@ -206,9 +207,9 @@ The token must be **RS256** with these claims:
 | Claim | Required | Notes |
 |---|---|---|
 | `id` | yes | Stable external identifier for the user (becomes `Contact.external_id`). String. |
-| `exp` | yes | Standard JWT expiration. ideabug's helper signs 1-hour tokens. |
-| `iat` | yes | Standard JWT issued-at. |
-| `jti` | recommended | Unique token ID for replay protection. |
+| `exp` | recommended | Standard JWT expiration. The example signs 1-hour tokens; the verifier checks expiration when present. |
+| `iat` | recommended | Standard JWT issued-at; validated when present. |
+| `jti` | optional | Unique token ID for tracing. ideabug does not track it or enforce replay protection. |
 | `info` | optional | Hash of arbitrary user metadata stored on `Contact.info_payload` (e.g. `{ email: "x@y.com", name: "Ada" }`). |
 | `segments` | optional | Hash of `{ "segment_identifier" => "value" }`. ideabug auto-creates contact ↔ segment_value links so you can target announcements (e.g. `{ "plan" => "pro", "region" => "eu" }`). |
 
@@ -424,15 +425,16 @@ If you already integrated the legacy `new IdeabugNotifications({...})` construct
 
 ## Public pages
 
-Each ideabug instance exposes two no-auth pages suitable for linking from your marketing site, footer, or release emails:
+Each ideabug instance exposes public pages suitable for linking from your marketing site, footer, or release emails:
 
-- **`/changelog`** — a clean, minimal changelog of all published *broadcast* announcements (anything with no segment targeting and `published_at <= now`). Each entry has a permalink at `/changelog/:id` with OpenGraph tags for sharing. Pagination is deep-linkable. Set `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE=true` to enable; otherwise both routes return 404.
+- **`/changelog`** — a clean, minimal changelog of all published *broadcast* announcements (anything with no segment targeting and `published_at <= now`). Each entry has a permalink at `/changelog/:id` with OpenGraph tags for sharing. Pagination is deep-linkable. Set `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE=true` to enable; leave it unset to disable (404).
 
   When public access is enabled, anonymous visitors hitting `/` are redirected to `/changelog` instead of seeing the marketing home.
 
 - **`/roadmap`** — Now / Next / Shipped Kanban + most-requested ideas, no auth required. Anchored ticket IDs (`/roadmap#ticket-123`) for deep links.
+- **`/features/:id`** — shareable detail page for a public feature request; private tickets and other classifications return 404.
 
-Both pages are read-only. Voting and marking-as-read require the embedded widget's anonymous identity (stored in `localStorage` and sent as `X-Ideabug-Anon-Id`).
+These pages are read-only. Voting and marking-as-read use the widget API with an anonymous ID or JWT identity.
 
 ---
 
@@ -440,10 +442,14 @@ Both pages are read-only. Voting and marking-as-read require the embedded widget
 
 ### Requirements
 
-- Ruby 4.0 (see `.ruby-version`)
-- PostgreSQL 14+
-- Redis 6+ (Action Cable + cache)
-- Node.js 20+ and Yarn (only for asset compilation in dev)
+- Ruby 4.0.9 and Bundler 4.0.22 (see `.ruby-version` and `Gemfile.lock`)
+- Rails 8.1.4.1
+- PostgreSQL 18 (used by development and deployment configurations)
+- Redis 8 (Action Cable; development caching and Rack::Attack use process-local memory)
+- Node.js 24.21.0 and Yarn 1.22.22 (only for asset compilation; see `.node-version`)
+
+Tailwind CSS stays on 3.4 with DaisyUI 4, and Pagy stays on 9. Updating those
+major versions requires a separate theme/template and pagination migration.
 
 ### Quick start with Docker (recommended)
 
@@ -455,13 +461,19 @@ dip provision                       # boots postgres+redis, runs bin/setup
 dip rails s                         # http://localhost:3000
 ```
 
+When upgrading an existing Docker development environment from PostgreSQL 14,
+export any data you need before recreating containers. PostgreSQL 18 uses a new
+`postgres_18` volume mounted at `/var/lib/postgresql`; the old volume is preserved
+but is not automatically migrated. Restore your export into the new database.
+Provisioning preserves volumes and runs setup without starting a server.
+
 ### Bare-metal install
 
 ```bash
 git clone https://github.com/humadroid-io/ideabug.git
 cd ideabug
 bundle install
-yarn install
+yarn install --frozen-lockfile
 bin/rails db:prepare
 bin/dev                             # puma + tailwind watch on :3001
 ```
@@ -478,16 +490,15 @@ bin/rails console
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | local postgres | Postgres connection string |
-| `REDIS_URL` | `redis://localhost:6379/1` | Redis URL |
+| `REDIS_URL` | `redis://localhost:6379/0` in development; `/1` in production | Action Cable Redis URL |
 | `RAILS_MASTER_KEY` | `config/master.key` | Decrypts `config/credentials.yml.enc` |
-| `JWT_PUBLIC_KEY` / `JWT_PUBLIC_KEY_FILE` | `config/jwt/public.pem` | Public key for verifying host-app JWTs (only required if you use JWT identity) |
-| `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE` | `false` | Enables the public `/changelog` page (and redirects unauthenticated `/` visitors to it). When false, those routes return 404. |
-| `HCAPTCHA_SECRET` | unset | Enables hCaptcha verification on `POST /api/v1/tickets` (widget passes `hcaptcha_token` in the body) |
+| `JWT_PUBLIC_KEY_BASE64` / `JWT_PUBLIC_KEY` / `JWT_PUBLIC_KEY_FILE` | `config/jwt/public.pem` | Public key for verifying host-app JWTs, in precedence order (only required for JWT identity). Relative filenames resolve under `config/jwt/`. |
+| `ANNOUNCEMENTS_PUBLICLY_ACCESSIBLE` | unset (disabled) | Enables public changelog routes and redirects unauthenticated `/` visitors there. The value is not boolean-coerced: even the string `false` enables it. Leave unset to disable. |
 | `CORS_ALLOWED_ORIGINS` | unset (= `*`) | Comma-separated list of origins allowed to call `/api/v1/*`. Supports exact origins (`https://app.acme.com`), bare hosts (`app.acme.com`), and wildcard subdomains (`*.humadroid.io`). Wildcards match any subdomain over http/https with optional port; they do **not** match the apex. Leave unset or set to `*` to allow any origin. `/script.js` stays open regardless. |
 
 ### Production deploy
 
-The repo ships with a pinned Kamal 2.11.0 setup in `config/deploy.example.yml` plus `bin/kamal`. The real `config/deploy.yml` is gitignored so each environment keeps its own host/image/SSH details out of source control.
+The repo ships with a pinned Kamal 2.12.0 setup in `config/deploy.example.yml` plus `bin/kamal`. The real `config/deploy.yml` is gitignored so each environment keeps its own host/image/SSH details out of source control.
 
 Single-host deploy:
 
@@ -509,6 +520,35 @@ If you later move to multiple app hosts, replace this single-host template with 
 
 After bumping versions, no Sprockets manifest config is needed — the widget bundle (`vendor/javascript/ideabug_widget.js` + `app/assets/stylesheets/ideabug_widget.css`) is auto-precompiled per `config/initializers/assets.rb`.
 
+### Heroku asset builds
+
+For Heroku apps using classic buildpacks, configure `heroku/nodejs` before
+`heroku/ruby` so Yarn installs DaisyUI before Rails runs `assets:precompile`.
+Check the current buildpacks first:
+
+```bash
+heroku buildpacks --app YOUR_APP
+```
+
+If no buildpacks are configured (automatic Ruby detection), set both explicitly:
+
+```bash
+heroku buildpacks:set heroku/ruby --app YOUR_APP
+heroku buildpacks:add --index 1 heroku/nodejs --app YOUR_APP
+```
+
+If the app already explicitly uses only `heroku/ruby`, just add Node.js first:
+
+```bash
+heroku buildpacks:add --index 1 heroku/nodejs --app YOUR_APP
+```
+
+The resulting order must be `heroku/nodejs`, then `heroku/ruby`. Commit
+`package.json` and `yarn.lock` before pushing. Node and Yarn versions are pinned
+in `package.json`; keep Node aligned with `.node-version` and the Docker images.
+DaisyUI belongs in `dependencies` because the Node buildpack prunes
+`devDependencies` before the Ruby buildpack compiles Tailwind CSS.
+
 ### Rate limiting
 
 `rack-attack` is enabled out of the box with these throttles (per anonymous ID and per IP):
@@ -519,7 +559,7 @@ After bumping versions, no Sprockets manifest config is needed — the widget bu
 | `POST /api/v1/tickets/:id/vote` | 60 / hour per anon |
 | `POST /api/v1/announcements/read_all` | 10 / hour per anon |
 
-Tune in `config/initializers/rack_attack.rb`.
+Tune in `config/initializers/rack_attack.rb`. Counters use process-local memory, so limits are not shared across workers. Per-anonymous-ID limits apply only when that header is present; the ticket creation IP limit also applies to JWT-only requests. hCaptcha is not implemented.
 
 ---
 
@@ -537,12 +577,14 @@ CORS defaults to `*` for `/api/v1/*` and `/script.js`. Restrict the API to speci
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/v1/identity` | Mint, echo, or merge a contact. Returns `{ anonymous_id, external_id, identified, opted_out, unread_count, contact_id }`. |
+| `GET` | `/api/v1/state` | Lightweight polling: `{ unread_count, opted_out, contact_id }`, plus the unread response header. |
 | `GET` | `/api/v1/announcements` | List up to 10 most recent (segment-filtered) announcements. Sets `X-Ideabug-Unread` header. |
 | `GET` | `/api/v1/announcements/:id` | Single announcement. |
 | `POST` | `/api/v1/announcements/:id/read` | Mark one as read. Idempotent. |
 | `POST` | `/api/v1/announcements/read_all` | Bulk mark unread (within last month). Returns `{ marked: N }`. |
 | `POST` | `/api/v1/announcements/opt_out` / `opt_in` | Toggle the contact's `announcements_opted_out` flag. |
 | `GET` | `/api/v1/tickets?type=feature&sort=top\|new` | Public roadmap items. Annotates `voted_by_me`. |
+| `GET` | `/api/v1/tickets?mine=true` | The current contact's submissions, including private tickets, newest first. |
 | `POST` | `/api/v1/tickets` | Submit a ticket. Body: `{ ticket: { title, description, classification, context } }`. |
 | `GET` | `/api/v1/tickets/:id` | Ticket detail (404 unless on roadmap or authored by caller). |
 | `POST` / `DELETE` | `/api/v1/tickets/:id/vote` | Toggle a vote (features only). |
@@ -570,7 +612,7 @@ Segments let you slice announcements by user attribute — release a "Pro plan b
 
 A contact gets linked to one or more segment values, and an announcement gets linked to one or more segment values. The visibility rule is then:
 
-> Show the announcement to a contact iff the announcement has **no** segment values **or** the contact and the announcement share **at least one** segment value.
+> Show the announcement if it has **no** segment values, or the contact matches **at least one value in every targeted segment**. Values within a segment use OR; different segments use AND.
 
 So an announcement with no segment values is a broadcast to everyone, and an announcement with `plan:pro` reaches only contacts whose `plan:pro` link is set.
 
@@ -607,11 +649,11 @@ JWT.encode({
 }, PRIVATE_KEY, "RS256")
 ```
 
-On every API call ideabug will:
+When a JWT contains a non-empty `segments` payload, ideabug will:
 
 1. Look up each segment by its identifier (`plan`, `region`, `team_id`).
 2. Find or create the matching `SegmentValue` (creation only if `allow_new_values` is on).
-3. Sync the contact ↔ segment_value links so they exactly reflect the JWT payload.
+3. Sync contact ↔ segment_value links to the recognized, allowed values in the payload. Unknown segments and disallowed new values are ignored. Unchanged normalized payloads skip the sync; omitted or empty payloads leave existing links unchanged.
 
 The full payload is also stored on the contact's `segments_payload` column for debugging.
 
@@ -633,9 +675,9 @@ The visibility logic is OR-within-segment, AND-across-segments only when you sel
 | `plan: pro` | `plan: free` | ✗ |
 | `plan: pro, plan: enterprise` | `plan: pro` | ✓ |
 | `plan: pro` AND `region: eu` | `plan: pro, region: eu` | ✓ |
-| `plan: pro` AND `region: eu` | `plan: pro, region: us` | ✓ (rule is "share at least one value", not "match all") |
+| `plan: pro` AND `region: eu` | `plan: pro, region: us` | ✗ |
 
-> **Note on AND semantics:** the current rule is "contact shares ≥1 segment value with the announcement." If you need strict AND-across-segments ("must be Pro **and** in EU"), file a feature request — it's a query-level change in `Api::V1::AnnouncementsController#announcement_scope`.
+The shared `Announcement.visible_to_contact` scope applies this rule to announcement lists, details, unread counts, and bulk read operations.
 
 #### Quick recipes
 
@@ -649,11 +691,10 @@ The visibility logic is OR-within-segment, AND-across-segments only when you sel
 ## Customization
 
 - **Accent color** — set `.ideabug-root { --ib-accent: <color>; }` on the host page.
-- **Bell icon target** — provide your own button as `data-ideabug-target`; the widget appends to it.
-- **Polling cadence** — currently fixed at 60s active / 5min hidden. To change, edit `vendor/javascript/ideabug_widget.js` (`POLL_VISIBLE_MS`, `POLL_HIDDEN_MS`).
-- **Announcement window** — "unread" decay is 1 month; tune `READ_WINDOW` in `Api::V1::AnnouncementsController`.
+- **Bell icon target** — use `data-ideabug-target` for a container receiving the default bell, or `data-ideabug-trigger` for your existing button.
+- **Polling cadence** — defaults to 60s active / 5min hidden; configure `pollInterval` and `pollIntervalHidden` through `IdeabugWidget.configure()`.
+- **Announcement window** — "unread" decay is 1 month; keep `READ_WINDOW` aligned in `Api::V1::AnnouncementsController` and `Api::V1::StateController`.
 - **Rate limits** — see `config/initializers/rack_attack.rb`.
-- **hCaptcha** — set `HCAPTCHA_SECRET` and pass `hcaptcha_token` from the widget's Suggest form.
 
 ---
 
@@ -661,17 +702,21 @@ The visibility logic is OR-within-segment, AND-across-segments only when you sel
 
 ```bash
 bin/dev                      # puma + tailwind watch
-bin/rails test               # full Minitest suite (run after every change)
+bin/rails test               # model, controller, service and integration tests
+bin/rails test:system        # browser tests (requires Chrome; runs headlessly)
 bin/rails test test/models   # subset
 bundle exec rubocop          # Standard preset, line length 100
+bundle exec bundle-audit check --update # refresh advisories and scan Gemfile.lock
 ```
 
-The test suite uses Minitest (not RSpec, despite the project's history). Factories are in `test/factories/`. There is no separate JS test runner; the embedded widget is covered at the HTTP layer (`test/integration/widget_script_test.rb`) and via the API tests it consumes.
+The test suite uses Minitest (not RSpec, despite the project's history). Factories are in `test/factories/`. There is no separate JS test runner; the embedded widget is covered at the HTTP layer, via API tests, and through Selenium browser tests in `test/system/widget_test.rb`. Admin browser tests cover contacts, segments, and feedback. Use `PARALLEL_WORKERS=1` when running against a single local test database. With mise, prefix commands with `mise exec --` to select the pinned Ruby. `bin/ci` includes Bundler Audit as well as the importmap audit.
+
+For local tests, generate a separate fixture key pair in `config/jwt/private.pem` and `config/jwt/public.pem`, or supply the test issuer's `JWT_PRIVATE_KEY` / `JWT_PRIVATE_KEY_FILE` and matching verifier settings. `/_test/widget_host` exists only in the test environment. Never use your production signing key for tests.
 
 ### Project conventions
 
 - Models follow the `## SCOPES / CONCERNS / CONSTANTS / ATTRIBUTES & RELATED / ASSOCIATIONS / VALIDATIONS / CALLBACKS / OTHER` skeleton — preserve it when editing.
-- Schema annotations are auto-generated by a custom `mlitwiniuk/annotate_models` fork; the `# == Schema Information` blocks are regenerated on `db:migrate` — leave them alone.
+- Preserve existing `# == Schema Information` blocks. The optional `mlitwiniuk/annotate_models` fork is commented out in `Gemfile`; automatic regeneration on `db:migrate` only runs if it is enabled.
 - Serializers use Blueprinter (`app/blueprints/`).
 - The embedded widget is plain IIFE JS (not Stimulus). The admin SPA-ish bits use Stimulus + Turbo via importmap.
 
@@ -697,7 +742,7 @@ app/
 └── views/
     ├── public_roadmap/                      # /roadmap page
     └── welcome/script.js.erb                # thin bootstrap shell
-vendor/javascript/ideabug_widget.js          # main widget (~430 LOC IIFE)
+vendor/javascript/ideabug_widget.js          # main widget (plain IIFE)
 ```
 
 ---

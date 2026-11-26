@@ -3,7 +3,7 @@ source "https://rubygems.org"
 ruby File.read(".ruby-version").chomp.gsub("ruby-", "")
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "8.1.3.1"
+gem "rails", "8.1.4.1"
 gem "rack-cors"
 
 # The original asset pipeline for Rails [https://github.com/rails/sprockets-rails]
@@ -13,7 +13,7 @@ gem "sprockets-rails"
 gem "pg", "~> 1.1"
 
 # Use the Puma web server [https://github.com/puma/puma]
-gem "puma", ">= 5.0"
+gem "puma", "~> 7.2", ">= 7.2.1"
 
 # Use JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
 gem "importmap-rails"
@@ -25,7 +25,9 @@ gem "turbo-rails"
 gem "stimulus-rails"
 
 # Use Tailwind CSS [https://github.com/rails/tailwindcss-rails]
-gem "tailwindcss-rails"
+# Tailwind 4 requires a coordinated DaisyUI/theme migration.
+gem "tailwindcss-rails", "~> 3.3"
+gem "tailwindcss-ruby", "~> 3.4"
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
@@ -58,16 +60,18 @@ gem "lexxy"
 gem "benchmark"
 
 group :development, :test do
+  gem "bundler-audit", require: false
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[mri windows]
   gem "factory_bot_rails"
 end
 
 group :development do
+  gem "foreman", require: false
   # gem "annotate", github: "mlitwiniuk/annotate_models", branch: "develop"
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
-  gem "kamal", "= 2.11.0"
+  gem "kamal", "= 2.12.0"
 
   # Add speed badges [https://github.com/MiniProfiler/rack-mini-profiler]
   # gem "rack-mini-profiler"

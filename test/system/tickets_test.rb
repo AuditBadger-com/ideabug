@@ -2,46 +2,47 @@ require "application_system_test_case"
 
 class TicketsTest < ApplicationSystemTestCase
   setup do
-    @ticket = tickets(:one)
+    @ticket = create(:ticket, title: "Existing feedback")
+    sign_in_as(create(:user))
   end
 
   test "visiting the index" do
     visit tickets_url
-    assert_selector "h1", text: "Tickets"
+    assert_selector "h1", text: "Feedback inbox"
+    assert_text @ticket.title
   end
 
-  test "should create ticket" do
+  test "creating feedback" do
     visit tickets_url
-    click_on "New ticket"
+    click_on "Add feedback"
 
-    fill_in "Classification", with: @ticket.classification
-    fill_in "Description", with: @ticket.description
-    fill_in "Status", with: @ticket.status
-    fill_in "Title", with: @ticket.title
-    click_on "Create Ticket"
+    fill_in "Title", with: "Export feedback"
+    fill_in "Description", with: "Allow exporting the feedback list"
+    select "Feature request", from: "Type"
+    click_on "Add feedback"
 
     assert_text "Ticket was successfully created"
-    click_on "Back"
+    assert_predicate Ticket.find_by!(title: "Export feedback"), :feature_request?
   end
 
-  test "should update Ticket" do
+  test "updating feedback" do
     visit ticket_url(@ticket)
-    click_on "Edit this ticket", match: :first
+    click_on "Edit", exact: true
 
-    fill_in "Classification", with: @ticket.classification
-    fill_in "Description", with: @ticket.description
-    fill_in "Status", with: @ticket.status
-    fill_in "Title", with: @ticket.title
-    click_on "Update Ticket"
+    fill_in "Title", with: "Updated feedback"
+    select "In progress", from: "Status"
+    click_on "Save changes"
 
     assert_text "Ticket was successfully updated"
-    click_on "Back"
+    assert_equal "Updated feedback", @ticket.reload.title
+    assert_predicate @ticket, :in_progress_status?
   end
 
-  test "should destroy Ticket" do
+  test "destroying feedback" do
     visit ticket_url(@ticket)
-    click_on "Destroy this ticket", match: :first
+    accept_confirm { click_on "Delete" }
 
     assert_text "Ticket was successfully destroyed"
+    assert_not Ticket.exists?(@ticket.id)
   end
 end

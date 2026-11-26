@@ -839,10 +839,9 @@
           );
           return;
         }
-        // Invalidate caches so the new submission shows up in My submissions
-        // and (for features) in the Roadmap tab on next visit.
+        // Invalidate the cache so the new submission shows up in My submissions.
+        // It stays off the Roadmap tab until an admin publishes it.
         this.mineData = null;
-        if (kind === "feature_request") this._loadedTabs.roadmap = false;
         body.innerHTML =
           '<div class="ideabug-success">' +
           (kind === "feature_request"

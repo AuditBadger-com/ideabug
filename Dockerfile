@@ -1,8 +1,9 @@
 # syntax = docker/dockerfile:1
 
 # Make sure RUBY_VERSION matches the Ruby version in .ruby-version and Gemfile
-ARG RUBY_VERSION=4.0.6
-FROM registry.docker.com/library/ruby:$RUBY_VERSION-slim as base
+ARG RUBY_VERSION=4.0.9
+FROM registry.docker.com/library/node:24.21.0-bookworm-slim AS node
+FROM registry.docker.com/library/ruby:$RUBY_VERSION-slim-bookworm AS base
 
 # Rails app lives here
 WORKDIR /rails
@@ -11,19 +12,21 @@ WORKDIR /rails
 ENV RAILS_ENV="production" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
-    BUNDLE_WITHOUT="development"
+    BUNDLE_WITHOUT="development:test"
 
 
 # Throw-away build stage to reduce size of final image
-FROM base as build
+FROM base AS build
 
 # Install packages needed to build gems and resolve JS deps for asset precompile.
 # nodejs + yarn are needed because config/tailwind.config.js requires the daisyui
 # plugin (a third-party plugin that isn't bundled into the tailwindcss-ruby
 # standalone CLI). They're build-stage only — nothing in the runtime image uses Node.
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential git libpq-dev libvips libyaml-dev nodejs npm pkg-config && \
-    npm install -g yarn@1.22
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /opt/yarn-v1.22.22 /opt/yarn
+RUN ln -s /opt/yarn/bin/yarn /usr/local/bin/yarn && \
+    apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential git libpq-dev libvips libyaml-dev pkg-config
 
 # Install application gems
 COPY Gemfile Gemfile.lock .ruby-version ./
