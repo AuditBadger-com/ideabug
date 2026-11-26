@@ -37,8 +37,8 @@ class TicketsController < ApplicationController
         format.html { redirect_to ticket_url(@ticket), notice: "Ticket was successfully created." }
         format.json { render :show, status: :created, location: @ticket }
       else
-        format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @ticket.errors, status: :unprocessable_entity }
+        format.html { render :new, status: :unprocessable_content }
+        format.json { render json: @ticket.errors, status: :unprocessable_content }
       end
     end
   end
@@ -49,8 +49,8 @@ class TicketsController < ApplicationController
         format.html { redirect_to ticket_url(@ticket), notice: "Ticket was successfully updated." }
         format.json { render :show, status: :ok, location: @ticket }
       else
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @ticket.errors, status: :unprocessable_entity }
+        format.html { render :edit, status: :unprocessable_content }
+        format.json { render json: @ticket.errors, status: :unprocessable_content }
       end
     end
   end
@@ -66,7 +66,7 @@ class TicketsController < ApplicationController
 
   def transition
     to = params[:to].to_s
-    return redirect_back(fallback_location: timeline_tickets_path, alert: "Unknown transition") unless TRANSITIONS.include?(to)
+    return redirect_back_or_to(timeline_tickets_path, alert: "Unknown transition") unless TRANSITIONS.include?(to)
 
     case to
     when "start"
@@ -79,7 +79,7 @@ class TicketsController < ApplicationController
       @ticket.update!(status: :in_progress, shipped_at: nil)
     end
 
-    redirect_back(fallback_location: timeline_tickets_path, notice: "Ticket updated.")
+    redirect_back_or_to(timeline_tickets_path, notice: "Ticket updated.")
   end
 
   private

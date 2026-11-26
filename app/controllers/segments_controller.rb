@@ -35,8 +35,8 @@ class SegmentsController < ApplicationController
         format.html { redirect_to @segment, notice: "Segment was successfully created." }
         format.json { render :show, status: :created, location: @segment }
       else
-        format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @segment.errors, status: :unprocessable_entity }
+        format.html { render :new, status: :unprocessable_content }
+        format.json { render json: @segment.errors, status: :unprocessable_content }
       end
     end
   end
@@ -48,8 +48,8 @@ class SegmentsController < ApplicationController
         format.html { redirect_to @segment, notice: "Segment was successfully updated." }
         format.json { render :show, status: :ok, location: @segment }
       else
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @segment.errors, status: :unprocessable_entity }
+        format.html { render :edit, status: :unprocessable_content }
+        format.json { render json: @segment.errors, status: :unprocessable_content }
       end
     end
   end

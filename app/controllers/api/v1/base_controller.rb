@@ -29,7 +29,7 @@ module Api
             title: "Unprocessable Entity",
             detail: exception.record.errors.full_messages.join(", ")
           }]
-        }, status: :unprocessable_entity
+        }, status: :unprocessable_content
       end
     end
   end

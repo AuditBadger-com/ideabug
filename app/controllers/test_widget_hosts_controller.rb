@@ -49,7 +49,7 @@ class TestWidgetHostsController < ApplicationController
     <<~HTML.html_safe
       <script>
         (function () {
-          var state = { v: 1#{anon_id ? ", anonymous_id: #{anon_id.to_json}" : ""} };
+          var state = { v: 1#{", anonymous_id: #{anon_id.to_json}" if anon_id} };
           localStorage.setItem("ideabug:state", JSON.stringify(state));
           window.__ideabugProvideJwt = true;
           window.__ideabugJwtToken = #{token.to_json};

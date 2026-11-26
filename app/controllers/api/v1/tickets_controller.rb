@@ -99,7 +99,7 @@ module Api
       end
 
       def render_not_votable
-        render json: {error: "Ticket is not votable"}, status: :unprocessable_entity
+        render json: {error: "Ticket is not votable"}, status: :unprocessable_content
       end
     end
   end

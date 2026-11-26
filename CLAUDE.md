@@ -47,6 +47,7 @@ Self-hosted feedback platform with an embeddable widget for announcements, bug r
 - `bin/rails test test/models/foo_test.rb` — single file
 - `bundle exec rubocop` — lint (Standard preset)
 - `bundle exec bundle-audit check --update` — gem vulnerability scan (also in `bin/ci`)
+- CI: `.github/workflows/ci.yml` runs lint, bundle-audit + importmap audit, unit tests + seeds, and system tests on PRs and `master`. Pre-existing rubocop offenses live in `.rubocop_todo.yml`; shrink it, don't grow it.
 - `bin/rails db:prepare` — create + migrate + seed
 - `dip provision` — bootstrap docker stack
 - Use `mise exec -- ...` locally if needed to select `.ruby-version`; `mise exec -- env PARALLEL_WORKERS=1 bin/rails test`
@@ -59,6 +60,6 @@ Self-hosted feedback platform with an embeddable widget for announcements, bug r
 - Tickets created through `POST /api/v1/tickets` are never public: an admin sets `public_on_roadmap` after rewriting the text, because submissions quote host-app data. Source is `agent` only when the verified JWT carries `src: "agent"`, otherwise `widget`; never read it from params.
 - Tests: unset a shell-exported `JWT_PRIVATE_KEY` (`env -u JWT_PRIVATE_KEY`), or `JwtTestIssuer` signs with it instead of `private_test.pem` and every JWT test returns 401.
 - JWT `id` is a stable string from the host app, stored as `Contact.external_id`; do not use ideabug's internal contact ID. `jti` is not checked for replay; `exp`/`iat` are validated when present, not required by the verifier.
-- Keep the shoulda reporter compatibility shim and Chrome password-manager preferences in test support when upgrading.
+- Keep the shoulda reporter compatibility shim, the Capybara Chrome storage-clear shim (Chrome 158+ rejects Capybara 3.40's `"*"` origin), and Chrome password-manager preferences in test support when upgrading.
 - Docker provisioning preserves volumes; PostgreSQL 18 uses `postgres_18` separately from historical PostgreSQL 14 data. Never delete old volumes as part of an upgrade.
 - `AGENTS.md` is a symlink to this file (`CLAUDE.md`).
