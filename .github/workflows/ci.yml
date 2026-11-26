@@ -27,7 +27,7 @@ jobs:
           bundler-cache: true
 
       - name: Prepare RuboCop cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         env:
           DEPENDENCIES_HASH: ${{ hashFiles('.rubocop.yml', 'Gemfile.lock') }}
         with:
@@ -114,7 +114,7 @@ jobs:
         run: bin/rails test:system
 
       - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure() && matrix.suite == 'system'
         with:
           name: screenshots
